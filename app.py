@@ -139,5 +139,52 @@ def update_branch_by_id(_id):
             return jsonify(branch_id = row['branch_id'], branch_name = row['branch_name'], city = row['city'],
                     address = row['address'], last_update = row['last_update'])
 
+#Account Management
+
+@app.route('/account', methods = ['POST'])
+def create_new_account():
+    body = request.json
+    tbuser_id = body.get('user_id')
+    tbbranch_id = body.get('branch_id')
+    tbfirst_deposit = body.get('first_deposit')
+    with engine.connect() as connection:
+        query = text("INSERT INTO account(user_id, branch_id, balance) VALUES (:user_id, :branch_id, :first_deposit)")
+        connection.execute(query, user_id = tbuser_id, branch_id = tbbranch_id, first_deposit = tbfirst_deposit)
+        current_insert = text("select * from account where account_id = (select max(account_id) from account)")
+        result = connection.execute(current_insert)
+        for row in result:
+            return jsonify(account_id = row['account_id'], user_id = row['user_id'], branch_id = row['branch_id'],
+                balance = row['balance'], status = row['status'], last_update = row['last_update'])
+
+@app.route('/account/<_id>', methods = ['PUT'])
+def update_account(_id):
+    body = request.json
+    tbuser_id = body.get('user_id')
+    tbbranch_id = body.get('branch_id')
+    tbbalance = body.get('balance')
+    tbstatus = body.get('status')
+    with engine.connect() as connection:
+        query = text("update account set user_id = :user_id, branch_id = :branch_id, balance = :balance,\
+            status = :status, last_update = current_timestamp where account_id = :account_id")
+        connection.execute(query, account_id = _id, user_id = tbuser_id, branch_id = tbbranch_id,
+            balance = tbbalance, status = tbstatus)
+        current_update = text("select * from account where account_id = :account_id")
+        result = connection.execute(current_update, account_id = _id)
+        for row in result:
+            return jsonify(account_id = row['account_id'], user_id = row['user_id'], branch_id = row['branch_id'],
+                balance = row['balance'], status = row['status'], last_update = row['last_update'])
+
+@app.route('/account/close/<_id>', methods = ['PUT'])
+def close_account(_id):
+    with engine.connect() as connection:
+        query = text("update account set status = 'closed', last_update = current_timestamp where account_id = :account_id")
+        connection.execute(query, account_id = _id)
+        current_update = text("select * from account where account_id = :account_id")
+        result = connection.execute(current_update, account_id = _id)
+        for row in result:
+            return jsonify(account_id = row['account_id'], user_id = row['user_id'], branch_id = row['branch_id'],
+                balance = row['balance'], status = row['status'], last_update = row['last_update'])
+
+
 if __name__ == "__main__":
     app.run(debug=True)
