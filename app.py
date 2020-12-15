@@ -185,6 +185,111 @@ def close_account(_id):
             return jsonify(account_id = row['account_id'], user_id = row['user_id'], branch_id = row['branch_id'],
                 balance = row['balance'], status = row['status'], last_update = row['last_update'])
 
+#Account Activity
+
+@app.route('/transaction/save/<_id>', methods = ['POST'])
+def save(_id):
+    body = request.json
+    tbamount = body.get('amount')
+    with engine.connect() as connection:
+        status_query = text("select status from account where account_id = :account_id")
+        status = connection.execute(status_query, account_id = _id)
+        for row in status:
+            if row['status'] == 'closed':
+                return jsonify(transaction_status = 'aborted', cause = 'account is closed')
+            elif row['status'] == 'active':
+                query = text("insert into transaction(account_id, type_of_transaction, amount) values (:account_id, 'save', :amount)")
+                connection.execute(query, account_id = _id, amount = tbamount)
+                update_account = text("update account set balance = balance + :amount where account_id = :account_id")
+                connection.execute(update_account, account_id = _id, amount = tbamount)
+                account_info = text("select * from account where account_id = :account_id")
+                result = connection.execute(account_info, account_id = _id)
+                for row in result:
+                    return jsonify(account_id = row['account_id'], user_id = row['user_id'], branch_id = row['branch_id'],
+                    balance = row['balance'], status = row['status'], last_update = row['last_update'])
+
+@app.route('/transaction/withdraw/<_id>', methods = ['POST'])
+def withdraw(_id):
+    body = request.json
+    tbamount = body.get('amount')
+    with engine.connect() as connection:
+        status_query = text("select * from account where account_id = :account_id")
+        status = connection.execute(status_query, account_id = _id)
+        for row in status:
+            if row['status'] == 'closed':
+                return jsonify(transaction_status = 'aborted', cause = 'account is closed')
+            elif row['status'] == 'active':
+                if int(row['balance']) - int(tbamount) < 50000:
+                    return jsonify(transaction_status = 'aborted', cause = 'balance is not enough to do transaction')
+                else:
+                    query = text("insert into transaction(account_id, type_of_transaction, amount) values (:account_id, 'withdraw', :amount)")
+                    connection.execute(query, account_id = _id, amount = tbamount)
+                    update_account = text("update account set balance = balance - :amount where account_id = :account_id")
+                    connection.execute(update_account, account_id = _id, amount = tbamount)
+                    account_info = text("select * from account where account_id = :account_id")
+                    result = connection.execute(account_info, account_id = _id)
+                    for row in result:
+                        return jsonify(account_id = row['account_id'], user_id = row['user_id'], branch_id = row['branch_id'],
+                        balance = row['balance'], status = row['status'], last_update = row['last_update'])
+
+@app.route('/transaction/history/<_id>', methods = ['GET'])
+def get_history_by_id(_id):
+    with engine.connect() as connection:
+        query = text("select * from transaction where account_id = :account_id")
+        result = connection.execute(query, account_id = _id)
+        list = []
+        for row in result:
+            list.append({'transaction_id' : row['transaction_id'], 'account_id' : row['account_id'],\
+                'type_of_transaction' : row['type_of_transaction'], 'amount' : row['amount'],\
+                'destination' : row['destination'], 'datetime' : row['datetime'] })
+        return jsonify(list)
+
+@app.route('/transaction/transfer/<_id>', methods = ['POST'])
+def transfer(_id):
+    body = request.json
+    tbamount = body.get('amount')
+    tbdestination = body.get('account_destination')
+    with engine.connect() as connection:
+        status_query = text("select * from account where account_id = :account_id")
+        status = connection.execute(status_query, account_id = _id)
+        for row in status:
+            if row['status'] == 'closed':
+                return jsonify(transaction_status = 'aborted', cause = 'account is closed')
+            elif row['status'] == 'active':
+                if int(row['balance']) - int(tbamount) < 50000:
+                    return jsonify(transaction_status = 'aborted', cause = 'balance is not enough to do transaction')
+                else:
+                    validate_query = text("select * from account where account_id = :destination")
+                    validate = connection.execute(validate_query, destination = tbdestination)
+                    for row in validate:
+                        if int(row['account_id']) != int(tbdestination):
+                            return jsonify(transaction_status = 'aborted', cause = 'destination account is not exist')
+                        elif int(row['account_id']) == int(tbdestination) and row['status'] == 'closed':
+                            return jsonify(transaction_status = 'aborted', cause = 'destination account is closed')
+                        elif int(row['account_id']) == int(tbdestination) and row['status'] == 'active':
+                            #update_sender
+                            transfer_query = text("insert into transaction(account_id, type_of_transaction, amount, destination_or_sender) values (:account_id, 'transfer', :amount, :destination)")
+                            connection.execute(transfer_query, account_id = _id, amount = tbamount, destination = tbdestination)
+                            update_sender = text("update account set balance = balance - :amount where account_id = :account_id")
+                            connection.execute(update_sender, account_id = _id, amount = tbamount)
+                            #update_receiver
+                            receiving_query = text("insert into transaction(account_id, type_of_transaction, amount, destination_or_sender) values (:account_id, 'receiving', :amount, :sender)")
+                            connection.execute(receiving_query, account_id = tbdestination, amount = tbamount, sender = _id)
+                            update_receiver = text("update account set balance = balance + :amount where account_id = :account_id")
+                            connection.execute(update_receiver, account_id = tbdestination, amount = tbamount)
+                            #view_transfer_status
+                            transaction_info = text("select * from transaction where account_id = :account_id and transaction_id = \
+                                (select max(transaction_id) from transaction where account_id = :account_id)")
+                            result = connection.execute(transaction_info, account_id = _id)
+                            for row in result:
+                                return jsonify(transaction_id = row['transaction_id'], account_id = row['account_id'],
+                                    type_of_transaction = row['type_of_transaction'], amount = row['amount'], 
+                                    destination = row['destination_or_sender'], datetime = row['datetime'],
+                                    status = 'success' )
+
+
+
+            
 
 if __name__ == "__main__":
     app.run(debug=True)
