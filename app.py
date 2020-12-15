@@ -1,6 +1,7 @@
 from flask import Flask, json, jsonify, request
 from sqlalchemy import create_engine
 from sqlalchemy.sql import text
+from datetime import datetime, timezone
 
 app = Flask(__name__)
 conn_str = 'postgresql://postgres:parallelepiped@localhost:5432/internet_banking'
@@ -286,6 +287,66 @@ def transfer(_id):
                                     type_of_transaction = row['type_of_transaction'], amount = row['amount'], 
                                     destination = row['destination_or_sender'], datetime = row['datetime'],
                                     status = 'success' )
+
+#Reporting
+
+@app.route('/report/total/<_id>', methods = ['GET'])
+def get_total_account_by_branch_id(_id):
+    with engine.connect() as connection:
+        query = text("select * from (select branch_id, count(account_id) as number_of_accounts, \
+            sum(balance) as total_balance from account where branch_id = :branch_id group by branch_id) as total cross join \
+            (select count(user_id) as number_of_users from(select distinct user_id\
+            from account where branch_id = :branch_id) as users) as num_users")
+        result = connection.execute(query, branch_id = _id)
+        for row in result:
+            return jsonify(branch_id = row['branch_id'], number_of_accounts = row['number_of_accounts'], total_balance = str(row['total_balance']),
+                number_of_users = row['number_of_users'])
+
+@app.route('/report/debit_credit/<_id>', methods = ['GET'])
+def get_debit_credit_by_branch_id(_id):
+    body = request.json
+    tbstart_date = body.get('start_date')
+    tbend_date = body.get('end_date')
+    with engine.connect() as connection:
+        query = text("select * from (select branch_id, sum(amount) as total_debit from transaction inner join\
+            account on transaction.account_id = account.account_id where branch_id = :branch_id and\
+            type_of_transaction = 'save' and datetime > :start_date and datetime < :end_date group by\
+            branch_id) as debit cross join (select sum(amount) as total_credit from transaction inner join\
+            account on transaction.account_id = account.account_id where branch_id = :branch_id and\
+            type_of_transaction = 'withdraw' and datetime > :start_date and datetime < :end_date) as credit")
+        result = connection.execute(query, branch_id = _id, start_date = tbstart_date, end_date = tbend_date)
+        for row in result:
+            return jsonify(branch_id = row['branch_id'], total_debit = str(row['total_debit']), total_credit = str(row['total_credit']))
+
+@app.route('/report/dormant_account', methods = ['GET'])
+def get_dormant_account():
+    with engine.connect() as connection:
+        all = []
+        max_account_query = text("select max(account_id) as max_account_id from transaction")
+        max_account = connection.execute(max_account_query)
+        for row in max_account:
+            tbaccount_id = 1
+            while tbaccount_id <= row['max_account_id']:
+                account_table_query = text("select * from transaction where account_id = :account_id order by datetime")
+                account_table = connection.execute(account_table_query, account_id = tbaccount_id)
+                time1 = datetime.now(timezone.utc)
+                for baris in account_table:
+                    time_span = time1 - baris['datetime']
+                    total_time_span = int(time_span.total_seconds()/86400)
+                    if total_time_span > 90 and time1 == datetime.now(timezone.utc):
+                        all.append({'account_id' : baris['account_id'], 'next_transaction' : 'none',\
+                            'last_transaction' : baris['datetime'],\
+                            'days_of_dormant_period' : total_time_span})
+                    elif total_time_span > 90 and time1 != datetime.now(timezone.utc):
+                        all.append({'account_id' : baris['account_id'], 'next_transaction' : time1,\
+                            'last_transaction' : baris['datetime'],\
+                            'days_of_dormant_period' : total_time_span})
+                    time1 = baris['datetime']
+                tbaccount_id += 1
+            return jsonify(all)
+                        
+
+
 
 
 
