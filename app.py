@@ -230,25 +230,28 @@ def save(_id):
 def withdraw(_id):
     body = request.json
     tbamount = body.get('amount')
-    with engine.connect() as connection:
-        status_query = text("select * from account where account_id = :account_id")
-        status = connection.execute(status_query, account_id = _id)
-        for row in status:
-            if row['status'] == 'closed':
-                return jsonify(transaction_status = 'aborted', cause = 'account is closed')
-            elif row['status'] == 'active':
-                if int(row['balance']) - int(tbamount) < 50000:
-                    return jsonify(transaction_status = 'aborted', cause = 'balance is not enough to do transaction')
-                else:
-                    query = text("insert into transaction(account_id, type_of_transaction, amount) values (:account_id, 'withdraw', :amount)")
-                    connection.execute(query, account_id = _id, amount = tbamount)
-                    update_account = text("update account set balance = balance - :amount where account_id = :account_id")
-                    connection.execute(update_account, account_id = _id, amount = tbamount)
-                    account_info = text("select * from account where account_id = :account_id")
-                    result = connection.execute(account_info, account_id = _id)
-                    for row in result:
-                        return jsonify(account_id = row['account_id'], user_id = row['user_id'], branch_id = row['branch_id'],
-                        balance = row['balance'], status = row['status'], last_update = row['last_update'])
+    try:
+        with engine.connect() as connection:
+            status_query = text("select * from account where account_id = :account_id")
+            status = connection.execute(status_query, account_id = _id)
+            for row in status:
+                if row['status'] == 'closed':
+                    return jsonify(transaction_status = 'aborted', cause = 'account is closed')
+                elif row['status'] == 'active':
+                    if int(row['balance']) - int(tbamount) < 50000:
+                        return jsonify(transaction_status = 'aborted', cause = 'balance is not enough to do transaction')
+                    else:
+                        query = text("insert into transaction(account_id, type_of_transaction, amount) values (:account_id, 'withdraw', :amount)")
+                        connection.execute(query, account_id = _id, amount = tbamount)
+                        update_account = text("update account set balance = balance - :amount where account_id = :account_id")
+                        connection.execute(update_account, account_id = _id, amount = tbamount)
+                        account_info = text("select * from account where account_id = :account_id")
+                        result = connection.execute(account_info, account_id = _id)
+                        for row in result:
+                            return jsonify(account_id = row['account_id'], user_id = row['user_id'], branch_id = row['branch_id'],
+                            balance = row['balance'], status = row['status'], last_update = row['last_update'])
+    except Exception as e:
+        return jsonify(error=str(e))  
 
 @app.route('/transaction/history/<_id>', methods = ['GET'])
 def get_history_by_id(_id):
@@ -327,10 +330,10 @@ def get_debit_credit_by_branch_id(_id):
     with engine.connect() as connection:
         query = text("select * from (select branch_id, sum(amount) as total_debit from transaction inner join\
             account on transaction.account_id = account.account_id where branch_id = :branch_id and\
-            type_of_transaction = 'save' and datetime > :start_date and datetime < :end_date group by\
+            (type_of_transaction = 'save' or type_of_transaction = 'receiving') and datetime > :start_date and datetime < :end_date group by\
             branch_id) as debit cross join (select sum(amount) as total_credit from transaction inner join\
             account on transaction.account_id = account.account_id where branch_id = :branch_id and\
-            type_of_transaction = 'withdraw' and datetime > :start_date and datetime < :end_date) as credit")
+            (type_of_transaction = 'withdraw' or type_of_transaction = 'transfer') and datetime > :start_date and datetime < :end_date) as credit")
         result = connection.execute(query, branch_id = _id, start_date = tbstart_date, end_date = tbend_date)
         for row in result:
             return jsonify(branch_id = row['branch_id'], total_debit = str(row['total_debit']), total_credit = str(row['total_credit']))
