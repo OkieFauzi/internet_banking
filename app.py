@@ -37,7 +37,7 @@ def get_all_users():
     all = []
     try:
         with engine.connect() as connection:
-            query = text("SELECT * from public.user")
+            query = text("SELECT * from public.user order by user_id")
             result = connection.execute(query)
             for row in result:
                 all.append({'user_id' : row['user_id'], 'prefix' : row['prefix'], 'first_name' : row['first_name'], 
@@ -59,27 +59,30 @@ def delete_user_by_id(_id):
 
 @app.route('/user/<_id>', methods = ['PUT'])
 def update_user_by_id(_id):
-    body = request.json
-    tbprefix = body.get('prefix')
-    tbfirst_name = body.get('first_name')
-    tblast_name = body.get('last_name')
-    tbaddress = body.get('address')
-    tbjob = body.get('job')
-    tbsource_of_income = body.get('source_of_income')
-    tbphone = body.get('phone')
-    with engine.connect() as connection:
-        query = text("update public.user set prefix = :prefix, first_name = :first_name, last_name = :last_name,\
-		    address = :address, job = :job, source_of_income = :source_of_income, phone = :phone,\
-            last_update = current_timestamp where user_id = :user_id")
-        connection.execute(query, user_id = _id, prefix = tbprefix, first_name = tbfirst_name, last_name = tblast_name, 
-            address = tbaddress, job = tbjob, source_of_income = tbsource_of_income, phone = tbphone)
-        view = text("select * from public.user where user_id = :user_id")
-        result = connection.execute(view, user_id = _id)
-        for row in result:
-            return jsonify(user_id = row['user_id'], prefix = row['prefix'], first_name = row['first_name'], 
+    try:
+        body = request.json
+        tbprefix = body.get('prefix')
+        tbfirst_name = body.get('first_name')
+        tblast_name = body.get('last_name')
+        tbaddress = body.get('address')
+        tbjob = body.get('job')
+        tbsource_of_income = body.get('source_of_income')
+        tbphone = body.get('phone')
+        with engine.connect() as connection:
+            query = text("update public.user set prefix = :prefix, first_name = :first_name, last_name = :last_name,\
+		        address = :address, job = :job, source_of_income = :source_of_income, phone = :phone,\
+                last_update = current_timestamp where user_id = :user_id")
+            connection.execute(query, user_id = _id, prefix = tbprefix, first_name = tbfirst_name, last_name = tblast_name, 
+                address = tbaddress, job = tbjob, source_of_income = tbsource_of_income, phone = tbphone)
+            view = text("select * from public.user where user_id = :user_id")
+            result = connection.execute(view, user_id = _id)
+            for row in result:
+                return jsonify(user_id = row['user_id'], prefix = row['prefix'], first_name = row['first_name'], 
                     last_name = row['last_name'], address = row['address'], job = row['job'], source_of_income = row['source_of_income'],
                     phone = row['phone'], last_update = row['last_update'])
-
+    except Exception as e:
+        return jsonify(error=str(e))
+    
 #branch management
 
 @app.route('/branch/new', methods = ['POST'])
@@ -105,7 +108,7 @@ def get_all_branch():
     all = []
     try:
         with engine.connect() as connection:
-            query = text("SELECT * from branch")
+            query = text("SELECT * from branch order by branch_id")
             result = connection.execute(query)
             for row in result:
                 all.append({'branch_id' : row['branch_id'], 'branch_name' : row['branch_name'], 'city' : row['city'],
@@ -130,15 +133,18 @@ def update_branch_by_id(_id):
     tbbranch_name = body.get('branch_name')
     tbcity = body.get('city')
     tbaddress = body.get('address')
-    with engine.connect() as connection:
-        query = text("update branch set branch_name = :branch_name, city = :city, address = :address,\
-            last_update = current_timestamp where branch_id = :branch_id")
-        connection.execute(query, branch_id = _id, branch_name = tbbranch_name, city = tbcity, address = tbaddress)
-        view = text("select * from branch where branch_id = :branch_id")
-        result = connection.execute(view, branch_id = _id)
-        for row in result:
-            return jsonify(branch_id = row['branch_id'], branch_name = row['branch_name'], city = row['city'],
+    try:
+        with engine.connect() as connection:
+            query = text("update branch set branch_name = :branch_name, city = :city, address = :address,\
+                branch_id = :branch_id, last_update = current_timestamp where branch_id = :branch_id")
+            connection.execute(query, branch_id = _id, branch_name = tbbranch_name, city = tbcity, address = tbaddress)
+            view = text("select * from branch where branch_id = :branch_id")
+            result = connection.execute(view, branch_id = _id)
+            for row in result:
+                return jsonify(branch_id = row['branch_id'], branch_name = row['branch_name'], city = row['city'],
                     address = row['address'], last_update = row['last_update'])
+    except Exception as e:
+        return jsonify(error=str(e))
 
 #Account Management
 
@@ -148,14 +154,19 @@ def create_new_account():
     tbuser_id = body.get('user_id')
     tbbranch_id = body.get('branch_id')
     tbfirst_deposit = body.get('first_deposit')
-    with engine.connect() as connection:
-        query = text("INSERT INTO account(user_id, branch_id, balance) VALUES (:user_id, :branch_id, :first_deposit)")
-        connection.execute(query, user_id = tbuser_id, branch_id = tbbranch_id, first_deposit = tbfirst_deposit)
-        current_insert = text("select * from account where account_id = (select max(account_id) from account)")
-        result = connection.execute(current_insert)
-        for row in result:
-            return jsonify(account_id = row['account_id'], user_id = row['user_id'], branch_id = row['branch_id'],
-                balance = row['balance'], status = row['status'], last_update = row['last_update'])
+    try:
+        with engine.connect() as connection:
+            query = text("INSERT INTO account(user_id, branch_id, balance) VALUES (:user_id, :branch_id, :first_deposit)")
+            connection.execute(query, user_id = tbuser_id, branch_id = tbbranch_id, first_deposit = tbfirst_deposit)
+            current_insert = text("select * from account where account_id = (select max(account_id) from account)")
+            result = connection.execute(current_insert)
+            for row in result:
+                update_transaction = text("insert into transaction(account_id, type_of_transaction, amount) values (:account_id, 'save', :amount)")
+                connection.execute(update_transaction, account_id = row['account_id'], amount = tbfirst_deposit)
+                return jsonify(account_id = row['account_id'], user_id = row['user_id'], branch_id = row['branch_id'],
+                    balance = row['balance'], status = row['status'], last_update = row['last_update'])
+    except Exception as e:
+        return jsonify(error=str(e))                    
 
 @app.route('/account/<_id>', methods = ['PUT'])
 def update_account(_id):
@@ -164,27 +175,33 @@ def update_account(_id):
     tbbranch_id = body.get('branch_id')
     tbbalance = body.get('balance')
     tbstatus = body.get('status')
-    with engine.connect() as connection:
-        query = text("update account set user_id = :user_id, branch_id = :branch_id, balance = :balance,\
-            status = :status, last_update = current_timestamp where account_id = :account_id")
-        connection.execute(query, account_id = _id, user_id = tbuser_id, branch_id = tbbranch_id,
-            balance = tbbalance, status = tbstatus)
-        current_update = text("select * from account where account_id = :account_id")
-        result = connection.execute(current_update, account_id = _id)
-        for row in result:
-            return jsonify(account_id = row['account_id'], user_id = row['user_id'], branch_id = row['branch_id'],
-                balance = row['balance'], status = row['status'], last_update = row['last_update'])
+    try:
+        with engine.connect() as connection:
+            query = text("update account set user_id = :user_id, branch_id = :branch_id, balance = :balance,\
+                status = :status, last_update = current_timestamp where account_id = :account_id")
+            connection.execute(query, account_id = _id, user_id = tbuser_id, branch_id = tbbranch_id,
+                balance = tbbalance, status = tbstatus)
+            current_update = text("select * from account where account_id = :account_id")
+            result = connection.execute(current_update, account_id = _id)
+            for row in result:
+                return jsonify(account_id = row['account_id'], user_id = row['user_id'], branch_id = row['branch_id'],
+                    balance = row['balance'], status = row['status'], last_update = row['last_update'])
+    except Exception as e:
+        return jsonify(error=str(e))  
 
 @app.route('/account/close/<_id>', methods = ['PUT'])
 def close_account(_id):
-    with engine.connect() as connection:
-        query = text("update account set status = 'closed', last_update = current_timestamp where account_id = :account_id")
-        connection.execute(query, account_id = _id)
-        current_update = text("select * from account where account_id = :account_id")
-        result = connection.execute(current_update, account_id = _id)
-        for row in result:
-            return jsonify(account_id = row['account_id'], user_id = row['user_id'], branch_id = row['branch_id'],
-                balance = row['balance'], status = row['status'], last_update = row['last_update'])
+    try:
+        with engine.connect() as connection:
+            query = text("update account set status = 'closed', last_update = current_timestamp where account_id = :account_id")
+            connection.execute(query, account_id = _id)
+            current_update = text("select * from account where account_id = :account_id")
+            result = connection.execute(current_update, account_id = _id)
+            for row in result:
+                return jsonify(account_id = row['account_id'], user_id = row['user_id'], branch_id = row['branch_id'],
+                    balance = row['balance'], status = row['status'], last_update = row['last_update'])
+    except Exception as e:
+        return jsonify(error=str(e))  
 
 #Account Activity
 
@@ -242,7 +259,7 @@ def get_history_by_id(_id):
         for row in result:
             list.append({'transaction_id' : row['transaction_id'], 'account_id' : row['account_id'],\
                 'type_of_transaction' : row['type_of_transaction'], 'amount' : row['amount'],\
-                'destination' : row['destination'], 'datetime' : row['datetime'] })
+                'destination' : row['destination_or_sender'], 'datetime' : row['datetime'] })
         return jsonify(list)
 
 @app.route('/transaction/transfer/<_id>', methods = ['POST'])
