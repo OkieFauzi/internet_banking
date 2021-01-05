@@ -2,8 +2,10 @@ from flask import Flask, json, jsonify, request
 from sqlalchemy import create_engine
 from sqlalchemy.sql import text
 from datetime import datetime, timezone
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 conn_str = 'postgresql://postgres:parallelepiped@localhost:5432/internet_banking'
 engine = create_engine(conn_str, echo=False)
 
@@ -201,7 +203,21 @@ def close_account(_id):
                 return jsonify(account_id = row['account_id'], user_id = row['user_id'], branch_id = row['branch_id'],
                     balance = row['balance'], status = row['status'], last_update = row['last_update'])
     except Exception as e:
-        return jsonify(error=str(e))  
+        return jsonify(error=str(e))
+
+@app.route('/account/<_id>', methods = ['GET'])
+def get_account_by_user_id(_id):
+    all = []
+    try:
+        with engine.connect() as connection:
+            query = text("select * from account where user_id = :user_id")
+            result = connection.execute(query, user_id = _id)
+            for row in result:
+                all.append({'user_id' : row['user_id'], 'account_id' : row['account_id'], 'branch_id' : row['branch_id'],
+                    'balance' : row['balance'], 'status' : row['status'], 'last_update' : row['last_update']})
+            return jsonify(all)
+    except Exception as e:
+        return jsonify(error=str(e))
 
 #Account Activity
 
@@ -364,13 +380,6 @@ def get_dormant_account():
                     time1 = baris['datetime']
                 tbaccount_id += 1
             return jsonify(all)
-                        
-
-
-
-
-
-            
 
 if __name__ == "__main__":
     app.run(debug=True)
