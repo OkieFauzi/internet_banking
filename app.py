@@ -1,8 +1,9 @@
 from flask import Flask, json, jsonify, request
 from sqlalchemy import create_engine
 from sqlalchemy.sql import text
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from flask_cors import CORS
+import secrets
 
 app = Flask(__name__)
 CORS(app)
@@ -168,7 +169,7 @@ def create_new_account():
                 return jsonify(account_id = row['account_id'], user_id = row['user_id'], branch_id = row['branch_id'],
                     balance = row['balance'], status = row['status'], last_update = row['last_update'])
     except Exception as e:
-        return jsonify(error=str(e))                    
+        return jsonify(error=str(e))  
 
 @app.route('/account/<_id>', methods = ['PUT'])
 def update_account(_id):
@@ -380,6 +381,60 @@ def get_dormant_account():
                     time1 = baris['datetime']
                 tbaccount_id += 1
             return jsonify(all)
+
+#LOGIN
+
+@app.route('/login', methods = ['POST'])
+def login():
+    body = request.json
+    tbuser_id = body.get('user_id')
+    tbpassword = body.get('password')
+    try:
+        with engine.connect() as connection:
+            query = text("select user_id, password from public.user order by user_id")
+            result = connection.execute(query)
+            validate_id = False
+            for row in result:
+                if tbuser_id == row['user_id'] and tbpassword != row['password']:
+                    validate_id = True
+                    return jsonify('password is not correct')
+                elif tbuser_id == row['user_id'] and tbpassword == row['password']:
+                    gen_token = secrets.token_hex()
+                    date_exp = datetime.now(timezone.utc) + timedelta(minutes = 15)
+                    token_query = text("INSERT INTO login(token, user_id, expired_at) VALUES (:token, :user_id, :expired_at)")
+                    connection.execute(token_query, token = gen_token, user_id = tbuser_id, expired_at = date_exp)
+                    validate_id = True
+                    return jsonify(token = gen_token)
+            if validate_id == False:
+                return jsonify('id dan password salah')
+    except Exception as e:
+        return jsonify(error=str(e))
+
+@app.route('/token/all', methods = ['GET'])
+def get_all_tokens():
+    all = []
+    try:
+        with engine.connect() as connection:
+            query = text("select * from login order by expired_at")
+            result = connection.execute(query)
+            for row in result:
+                all.append({'user_id' : row['user_id'], 'token' : row['token'], 'expired_at' : row['expired_at']})
+            return jsonify(all)
+    except Exception as e:
+        return jsonify(error=str(e))
+
+@app.route('/logout', methods = ['DELETE'])
+def logout():
+    body = request.json
+    tbtoken = body.get('token')
+    try:
+        with engine.connect() as connection:
+            query = text("delete from login where token = :token")
+            connection.execute(query, token = tbtoken)
+            return jsonify(token = tbtoken, status = 'logout')
+    except Exception as e:
+        return jsonify(error=str(e))
+
 
 if __name__ == "__main__":
     app.run(debug=True)
