@@ -406,12 +406,12 @@ def login():
                     validate_id = True
                     return jsonify(token = gen_token)
             if validate_id == False:
-                return jsonify('id dan password salah')
+                return jsonify('id not registered')
     except Exception as e:
         return jsonify(error=str(e))
 
-@app.route('/token/all', methods = ['GET'])
-def get_all_tokens():
+@app.route('/login/all', methods = ['GET'])
+def get_all_user_logged_in():
     all = []
     try:
         with engine.connect() as connection:
