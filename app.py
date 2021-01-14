@@ -220,6 +220,19 @@ def get_account_by_user_id(_id):
     except Exception as e:
         return jsonify(error=str(e))
 
+@app.route('/account_id/<_id>', methods = ['GET'])
+def get_account_by_account_id(_id):
+    try:
+        with engine.connect() as connection:
+            query = text("select * from public.user inner join account on public.user.user_id = account.user_id \
+                where account_id = :account_id")
+            result = connection.execute(query, account_id = _id)
+            for row in result:
+                return jsonify(account_id = row['account_id'], user_id = row['user_id'], first_name = row['first_name'],
+                    last_name = row['last_name'], status = row['status'], balance = row['balance'])
+    except Exception as e:
+        return jsonify(error = str(e))
+
 #Account Activity
 
 @app.route('/transaction/save/<_id>', methods = ['POST'])
