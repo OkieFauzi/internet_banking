@@ -229,7 +229,7 @@ def get_account_by_account_id(_id):
             result = connection.execute(query, account_id = _id)
             for row in result:
                 return jsonify(account_id = row['account_id'], user_id = row['user_id'], first_name = row['first_name'],
-                    last_name = row['last_name'], status = row['status'], balance = row['balance'])
+                    last_name = row['last_name'], status = row['status'], balance = row['balance'], password = row['password'])
     except Exception as e:
         return jsonify(error = str(e))
 
@@ -410,16 +410,16 @@ def login():
             for row in result:
                 if tbuser_id == row['user_id'] and tbpassword != row['password']:
                     validate_id = True
-                    return jsonify('password is not correct')
+                    return jsonify(status = 'aborted', reason = 'password is not correct')
                 elif tbuser_id == row['user_id'] and tbpassword == row['password']:
                     gen_token = secrets.token_hex()
                     date_exp = datetime.now(timezone.utc) + timedelta(minutes = 15)
                     token_query = text("INSERT INTO login(token, user_id, expired_at) VALUES (:token, :user_id, :expired_at)")
                     connection.execute(token_query, token = gen_token, user_id = tbuser_id, expired_at = date_exp)
                     validate_id = True
-                    return jsonify(token = gen_token)
+                    return jsonify(token = gen_token, status = 'success')
             if validate_id == False:
-                return jsonify('id not registered')
+                return jsonify(status = 'aborted', reason = 'id not registered')
     except Exception as e:
         return jsonify(error=str(e))
 
