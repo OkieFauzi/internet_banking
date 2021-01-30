@@ -286,7 +286,7 @@ def withdraw(_id):
 @app.route('/transaction/history/<_id>', methods = ['GET'])
 def get_history_by_id(_id):
     with engine.connect() as connection:
-        query = text("select * from transaction where account_id = :account_id")
+        query = text("select * from transaction where account_id = :account_id order by datetime desc")
         result = connection.execute(query, account_id = _id)
         list = []
         for row in result:
@@ -400,22 +400,22 @@ def get_dormant_account():
 @app.route('/login', methods = ['POST'])
 def login():
     body = request.json
-    tbuser_id = body.get('user_id')
+    tbusername = body.get('username')
     tbpassword = body.get('password')
     try:
         with engine.connect() as connection:
-            query = text("select user_id, password from public.user order by user_id")
+            query = text("select user_id, username, password from public.user order by user_id")
             result = connection.execute(query)
             validate_id = False
             for row in result:
-                if tbuser_id == row['user_id'] and tbpassword != row['password']:
+                if tbusername == row['username'] and tbpassword != row['password']:
                     validate_id = True
                     return jsonify(status = 'aborted', reason = 'password is not correct')
-                elif tbuser_id == row['user_id'] and tbpassword == row['password']:
+                elif tbusername == row['username'] and tbpassword == row['password']:
                     gen_token = secrets.token_hex()
                     date_exp = datetime.now(timezone.utc) + timedelta(minutes = 15)
                     token_query = text("INSERT INTO login(token, user_id, expired_at) VALUES (:token, :user_id, :expired_at)")
-                    connection.execute(token_query, token = gen_token, user_id = tbuser_id, expired_at = date_exp)
+                    connection.execute(token_query, token = gen_token, user_id = row['user_id'], expired_at = date_exp)
                     validate_id = True
                     return jsonify(token = gen_token, status = 'success')
             if validate_id == False:
