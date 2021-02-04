@@ -4,11 +4,20 @@ from sqlalchemy.sql import text
 from datetime import datetime, timezone, timedelta
 from flask_cors import CORS
 import secrets
+import random
 
 app = Flask(__name__)
 CORS(app)
 conn_str = 'postgresql://postgres:parallelepiped@localhost:5432/internet_banking'
 engine = create_engine(conn_str, echo=False)
+
+#Generating account number function
+
+def account_generator():
+    num = random.randint(10000,99999)
+    account_number = int(str(13300) + str(num))
+    return account_number
+
 
 #user management
 
@@ -157,12 +166,13 @@ def create_new_account():
     tbuser_id = body.get('user_id')
     tbbranch_id = body.get('branch_id')
     tbfirst_deposit = body.get('first_deposit')
+    tbaccount_id = account_generator()
     try:
         with engine.connect() as connection:
-            query = text("INSERT INTO account(user_id, branch_id, balance) VALUES (:user_id, :branch_id, :first_deposit)")
-            connection.execute(query, user_id = tbuser_id, branch_id = tbbranch_id, first_deposit = tbfirst_deposit)
-            current_insert = text("select * from account where account_id = (select max(account_id) from account)")
-            result = connection.execute(current_insert)
+            query = text("INSERT INTO account(account_id, user_id, branch_id, balance) VALUES (:account_id, :user_id, :branch_id, :first_deposit)")
+            connection.execute(query, user_id = tbuser_id, branch_id = tbbranch_id, first_deposit = tbfirst_deposit, account_id = tbaccount_id)
+            current_insert = text("select * from account where account_id = :account_id")
+            result = connection.execute(current_insert, account_id = tbaccount_id)
             for row in result:
                 update_transaction = text("insert into transaction(account_id, type_of_transaction, amount) values (:account_id, 'save', :amount)")
                 connection.execute(update_transaction, account_id = row['account_id'], amount = tbfirst_deposit)
